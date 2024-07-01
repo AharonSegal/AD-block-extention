@@ -1,0 +1,216 @@
+(install "Txt Syntax" extention to see in color)
+-*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*-
++-------------------+
+|  =QUICK_SUMMARY=  |
++-------------------+
+
+SIMPLE SUMMARY
+    Blocks outgoing requests to known ad domains.
+    Hides ad elements on the page based on class names.
+    Attempts to catch both external and local ads, but may miss some sophisticated or first-party ads
+
+TECHNICAL SUMMARY
+    Primary defense: **declarativeNetRequest**
+        1. Blocks requests to known ad domains (both third-party and local)
+        2. Prevents many ads from loading at all
+        3. Operates at the network level
+        4. Uses rules defined in rules.json
+
+    Secondary defense: **content.js with hideAds()**
+        1. Acts as a fallback mechanism
+        2. Hides ad elements that made it through the network-level blocking
+        3. Operates on the rendered page content
+        4. Can potentially catch:
+            Ads from domains not listed in the blocking rules
+            Ads that were dynamically inserted after initial load
+            Any element using the specified ad-related class names
+
+-*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*-
++-----------------------+
+|  =PROGRAM_STRUCTURE=  |
++-----------------------+
+
+~ The manifest sets up the extension structure and permissions.
+~ The rules in rules.json block requests to specified ad domains at the network level.
+~ The content script hides any ad elements that might have slipped through the network~ evel blocking.
+
+-*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*-
++----------------------------+
+|  =MANIFEST.JSON_COMMENTS=  |
++----------------------------+
+
+This file is the configuration for the extension:
+
+~ manifest_version: Specifies we're using Manifest V3.
+~ name, version, description: Basic metadata about the extension.
+~ [MAIN]permissions: Lists the Chrome APIs the extension can use. Here, we're using declarativeNetRequest for blocking requests. 
+            The declarativeNetRequest permission and its associated functionality 
+            form a core component of this ad-blocking extension. 
+~ host_permissions: Specifies which websites the extension can interact with. "<all_urls>" means all websites.
+~ background: Defines a service worker script that runs in the background.
+~ content_scripts: Specifies scripts that run directly in web pages. Our content script runs on all URLs.
+~ declarative_net_request: Defines the ruleset for blocking requests, pointing to our rules.json file.
+
+-*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*-
++-------------------------+
+|  =RULES.JSON_COMMENTS=  |
++-------------------------+
+
+This file defines the rules for blocking ad domains:
+Each rule has an id, priority, action, and condition.
+
+~ action: Specifies to block the request.
+~ condition: Defines when to apply the rule.
+    ~ urlFilter: A pattern to match against URLs. || means "start of domain", ^ means "end of domain or start of path".
+~ resourceTypes: Types of resources to block (basically, all types).
+
+
+-*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*-
+
+[deep understanding of how the blocking works]
+
++-----------------------+
+|  ==GENERAL_KNOLEDGE=  |
++-----------------------+
+
+**permissions: **
+
+Permissions in Chrome extensions are requests 
+    *from* the extension developer 
+     *to* Google Chrome (and by extension, to the user) 
+     *for* access to specific browser capabilities and APIs that the extension needs to function as intended.
+
+Regarding the declarativeNetRequest permission:
+    allows a Chrome extension to block, redirect, or modify 
+    network requests based on predefined rules (in rules.json :"action"),
+    enabling efficient content blocking and request modification
+    without accessing the full content of requests.
+
++-------------------------------+
+| =how_its_used_in_our_context= |
++-------------------------------+
+
+In the case of this ad-blocking extension, 
+    were primarily blocking network requests that are likely to contain or load advertisements. 
+    Let's break down what were blocking based on the rules.json file:
+
+~ Specific domains:
+    the extension is blocking requests to known ad-serving domains. 
+    Specifically:
+        doubleclick.net
+        googlesyndication.com
+        googleadservices.com
+
+
+~ Request types:
+    The rules apply to various resource types, including:
+
+    main_frame (entire web pages)
+    sub_frame (iframes)
+    stylesheet (CSS files)
+    script (JavaScript files)
+    image
+    font
+    object
+    xmlhttprequest (AJAX requests)
+    and others
+
+
+~ What's being blocked:
+
+    Any request to these domains, regardless of the specific path or resource
+    This could include ad images, scripts that load ads, tracking pixels, etc.
+
+
+~ How it's blocking:
+
+    When a web page tries to load a resource from one of these domains, 
+    the request is intercepted and blocked before it's sent
+    This prevents the ad content from being downloaded or displayed
+    
+-   -   -   -   -   -   -   -   -   -   -   -   -   -   -
+NOW LETS DEEPEN OUR UNDERSTANDING OF "How it's blocking"
+
+1. Initial page load:
+   ~ When you open a site, your browser sends a request to that site's server.
+   ~ The server responds with the initial HTML, CSS, and JavaScript.
+
+2. Rendering and additional requests:
+    ~ As the browser renders the page, it encounters references to additional resources.
+   ~ These could be first-party (from the same domain) or third-party (from other domains, including ad servers).
+
+3. Ad-related requests:
+   ~ Among these additional requests are calls to ad networks and other third-party services.
+   ~ These requests might be for ad images, scripts to load ads, tracking pixels, etc.
+
+4. Extension intervention:
+   ~ Your extension's declarativeNetRequest rules are active before these requests are sent.
+   ~ When the browser is about to make a request to a blocked domain (like doubleclick.net), the extension intercepts this.
+   ~ The request is blocked entirely - it's not sent out at all.
+
+5. Result of blocking:
+   ~ The browser doesn't receive any response for these blocked requests.
+   ~ From the webpage's perspective, it's as if the request failed or timed out.
+
+6. Page modification:
+   ~ The content script (content.js) then hides elements with ad-related class names.
+   ~ This is a backup to catch any ads that might have slipped through or are served from non-blocked domains.
+
+7. What doesn't happen:
+   ~ The extension doesn't modify the "expected location" directly.
+   ~ It doesn't replace content; it prevents it from being loaded and then hides potential placeholders.
+
+So, it's preventing certain requests from being made at all,
+    and then using CSS to hide elements that might contain ads.     
+    This two-pronged approach (network-level blocking and DOM manipulation) makes the ad blocking more comprehensive.
+
+-*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*-
+
++----------------------------------+
+| =FAIL_CASES= & =ways_to_improve= |
++----------------------------------+
+
+Let's clarify what kinds of ads might "cross" or get through this two-layer defense:
+
+**declarativeNetRequest**:
+
+1. Ads using new or unlisted domains:
+   ~ Why it fails: The rules only block listed domains. New ad domains won't be in the list.
+   ~ Solution: Regularly update the rules to include new ad-serving domains.
+
+2. First-party ads (partially):
+   ~ Why it fails: These ads are often served from the main site's domain, which isn't blocked. [not accesing an api]
+   ~ Note: Some aspects of first-party ads might still be blocked if they load resources from known ad domains.
+
+**hide()**:
+
+1. Ads using unique or obfuscated class names:
+   ~ Why it fails: The current hide() function only targets specific class names ('.ad', '.advertisement', '.banner-ad').
+   ~ Solution: Expand the list of class names or use more complex selectors.
+
+2. Ads without specific class names:
+   ~ Why it fails: hide() relies on specific class names. If an ad doesn't use these, it won't be caught.
+   ~ Solution: Implement more sophisticated content analysis in the script.
+
+   Here's an improved, more accurate version in two sentences:
+
+   3. First-party ads:
+      ~ Why current methods often fail: These ads typically use unique class names
+       or structures, blend with regular content, and are served from the main site's domain,
+        evading both declarativeNetRequest rules and the simple class-based hiding of the current hide() function.
+        ~ Potential solution: Expand the content script beyond the basic hide() function
+          to implement more sophisticated techniques like contextual analysis
+          and pattern recognition, which could better identify and hide first-party ads
+          regardless of their class names or structures.
+
+**Both might fail:**
+
+4. Native ads or sponsored content:
+   ~ Why both fail: Often served from the main site's domain and don't use typical ad class names.
+   ~ Solution: More advanced content analysis and pattern recognition in the content script.
+
+5. Ads inserted using complex JavaScript:
+   ~ Why declarativeNetRequest fails: If generated client-side (not via api), there might not be a network request to block.
+   ~ Why hide() fails: Dynamic insertion might use different class names or structures.
+   ~ Solution: Implement more dynamic content monitoring in the content script.
+
